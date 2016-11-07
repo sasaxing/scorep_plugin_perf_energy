@@ -61,7 +61,7 @@ See below for a list of available metrics.
 
 | Name                                   | estimation fomula                                     |
 | ---------------------------------------| ------------------------------------------------------|
-| energy-cores                           |  0.1*cpu-cycles + 10*cache-misses                     |
+| energy-cores                           |  0.1 * cpu-cycles + 10 * cache-misses                 |
 | << to be continued >>                  |  << to be continued >>                                |
 
 E.g. 
