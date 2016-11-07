@@ -1,4 +1,4 @@
-#Score-P/VampirTrace perf energy consumption Plugin Counter
+#Score-P perf energy consumption Counter
 
 ##Compilation and Installation
 
