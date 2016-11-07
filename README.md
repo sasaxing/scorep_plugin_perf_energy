@@ -77,4 +77,4 @@ E.g.
 
 3. Write a mail to the author.
 
-* Robert Schoene (xiaosha.xing at tu-dresden dot de)
+* Xiaosha Xing (xiaosha.xing at tu-dresden dot de)
