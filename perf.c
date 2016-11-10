@@ -82,35 +82,39 @@ void build_perf_attr(struct perf_event_attr * attr, int event_num)
 
 
   // those that will be used.
-  if(event_num == cpu_cycles || event_num == cycles){
-    attr->type   = PERF_TYPE_HARDWARE;
-    attr->config = PERF_COUNT_HW_CPU_CYCLES;
-  }
-  if (event_num == instructions)
-  {
-    attr->type   = PERF_TYPE_HARDWARE;
-    attr->config = PERF_COUNT_HW_INSTRUCTIONS;
-  }
-  if (event_num == cache_references)
-  {
-    attr->type   = PERF_TYPE_HARDWARE;
-    attr->config = PERF_COUNT_HW_CACHE_REFERENCES;
-  }
-  if (event_num == cache_misses)
-  {
-    attr->type   = PERF_TYPE_HARDWARE;
-    attr->config = PERF_COUNT_HW_CACHE_MISSES;
-  }
-  if (event_num == branch_instructions || event_num == branches )
-  {
-    attr->type   = PERF_TYPE_HARDWARE;
-    attr->config = PERF_COUNT_HW_BRANCH_INSTRUCTIONS;
-  }
-  if (event_num == branch_misses)
-  {
-    attr->type   = PERF_TYPE_HARDWARE;
-    attr->config = PERF_COUNT_HW_BRANCH_MISSES;
-  }
+  switch(event_num){
+    case cpu_cycles:
+      attr->type   = PERF_TYPE_HARDWARE;
+      attr->config = PERF_COUNT_HW_CPU_CYCLES;
+      break;
+
+    case instructions:
+      attr->type   = PERF_TYPE_HARDWARE;
+      attr->config = PERF_COUNT_HW_INSTRUCTIONS;
+      break;
+
+    case cache_references:
+      attr->type   = PERF_TYPE_HARDWARE;
+      attr->config = PERF_COUNT_HW_CACHE_REFERENCES;
+      break;
+
+    case cache_misses:
+      attr->type   = PERF_TYPE_HARDWARE;
+      attr->config = PERF_COUNT_HW_CACHE_MISSES;
+      break;
+
+    case branch_instructions:
+      attr->type   = PERF_TYPE_HARDWARE;
+      attr->config = PERF_COUNT_HW_BRANCH_INSTRUCTIONS;
+      break;
+
+    case branch_misses:
+      attr->type   = PERF_TYPE_HARDWARE;
+      attr->config = PERF_COUNT_HW_BRANCH_MISSES;
+      break;
+
+    default:
+      break;
 
 }
 
