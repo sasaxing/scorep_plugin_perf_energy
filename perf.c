@@ -1,3 +1,5 @@
+// estimation equation: Joules.power.energy.cores = 1.602416e-9*instructions-9.779874e-11 *cpu.cycles +  6.437730e-08*cache.misses +2.418160e+03
+
 ///////////////////////////////// start： headers///////////////////////////////////////////
 // check if there exists VT/SCOREP，then decide which header to include.
 // in my case, when building: -DSCOREP_DIR=~/install/scorep, so scorep detected->scorep_MetricPlugin.h
@@ -15,7 +17,7 @@
 #include <stdio.h>
 #include <errno.h>   
 #include <unistd.h>  
-#include <stdint.h>
+#include <stdint.h>  //uint64_t
 #include <sys/syscall.h>
 
 #include <linux/perf_event.h>
@@ -23,10 +25,10 @@
 
 
 ////////////////////////////// start : global variables. ////////////////////////////// 
-#define N 2  //  CTNAME_FD ctname_fd[N]
+#define N 3  //  how many counters I use for estimation. CTNAME_FD ctname_fd[N]
 
 /* define the unique id for metrics (add_counter) */
-#define ENERGY_CORES 1 
+#define ENERGY_THREAD 1 
 
 // mnemonic for base perf event-counters. why cannot '-'
 enum perf_event{
@@ -49,6 +51,7 @@ typedef struct
 // global array for fd setter and getter.
 // store those that may be useful to calculate required metric result.
 static CTNAME_FD ctname_fd[N]={
+  {instructions,-1},
   {cpu_cycles,-1},
   {cache_misses,-1}
 };  
@@ -116,6 +119,8 @@ void build_perf_attr(struct perf_event_attr * attr, int event_num)
     default:
       break;
 
+    }
+
 }
 
 /////////////////end: assign value to all attr.type , attr.config.////////////////////
@@ -152,10 +157,11 @@ int32_t add_counter(char * event_name)
 
   int i=0; // for loop.
 
-  if(strstr( event_name, "energy-cores" ) == event_name)
+  if(strstr( event_name, "energy-thread" ) == event_name)
   {
-    id = ENERGY_CORES;
+    id = ENERGY_THREAD;
 
+    set_fd(instructions);
     set_fd(cpu_cycles);
     set_fd(cache_misses);
 
@@ -187,41 +193,49 @@ int get_fd(int event_num)
   return fd;
 }
 
+uint64_t get_counterValue(int event_num){
+
+  int fd;
+  size_t ret;
+  uint64_t count;
+
+  fd = get_fd(event_num);
+  if(fd <= 0){
+      fprintf(stderr, "Unable to get event for event_num=%d!",event_num);
+      return -1;
+  }
+
+  ret =read(fd, &count, sizeof(uint64_t));
+
+  if (ret!=sizeof(uint64_t)){
+    return -1;
+  }
+
+  return count;
+}
+
 
 uint64_t get_value(int id){
   uint64_t result;
   
-  int fd1=-1;  uint64_t count1=0; size_t ret1;
-  int fd2=-1;  uint64_t count2=0; size_t ret2;
+  uint64_t count1=0; 
+  uint64_t count2=0; 
+  uint64_t count3=0;
 
-  int i=0;
 
-  if (id < 0){
-    fprintf(stderr, "PERF metric not recognized: %d.", id );
-    return -1;
-  }
-
-  if(id == ENERGY_CORES){  // required event: energy-cores = 0.1*cpu-cycles + 10*cache-misses.
+  if(id == ENERGY_THREAD){  // required event: energy-cores = 0.1*cpu-cycles + 10*cache-misses.
     
-    fd1=get_fd(cpu_cycles);
-    fd2=get_fd(cache_misses);
+    count1=get_counterValue(instructions);
+    count2=get_counterValue(cpu_cycles);
+    count3=get_counterValue(cache_misses);
 
-    if (fd1<=0  || fd2 <=0){
-      fprintf(stderr, "Unable to compute 'metric(id=%d)'!",id);
-      return -1;
-    } 
-
-    ret1 =read(fd1, &count1, sizeof(uint64_t));
-    ret2 =read(fd2, &count2, sizeof(uint64_t));
-
-
-    if (ret1!=sizeof(uint64_t) || ret2!=sizeof(uint64_t)){
+    if (count1<0|| count2<0 || count3<0){
       return !0;
     }
      
   }
   
-  result = 0.1*count1 + 10*count2;
+  result = 1.602416e-9*count1-9.779874e-11 *count2 +  6.437730e-08*count3 +2.418160e+03;
  
   return result;
 }
