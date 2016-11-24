@@ -223,8 +223,8 @@ uint64_t get_value(int id){
   uint64_t count3=0;
 
 
-  if(id == ENERGY_THREAD){  // required event: energy-cores = 0.1*cpu-cycles + 10*cache-misses.
-    
+  if(id == ENERGY_THREAD){ 
+   
     count1=get_counterValue(instructions);
     count2=get_counterValue(cpu_cycles);
     count3=get_counterValue(cache_misses);
