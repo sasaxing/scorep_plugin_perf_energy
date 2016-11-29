@@ -1,3 +1,5 @@
+// version10: provide 2 metrics, m_i and E-cores.
+
 // estimation equation: Joules.power.energy.cores = 1.602416e-9*instructions-9.779874e-11 *cpu.cycles +  6.437730e-08*cache.misses +2.418160e+03
 
 ///////////////////////////////// start： headers///////////////////////////////////////////
@@ -10,7 +12,7 @@
 #error "You need Score-P  to compile this plugin"
 #endif /* SCOREP*/
  
-
+#include <omp.h>
 #include <inttypes.h>  //PRIu64
 #include <stdlib.h>   // strtoll();   malloc();
 #include <string.h>
@@ -19,16 +21,27 @@
 #include <unistd.h>  
 #include <stdint.h>  //uint64_t
 #include <sys/syscall.h>
+#include <sys/types.h>
 
 #include <linux/perf_event.h>
 ////////////////////////////// end： headers////////////////////////////////////////////
 
 
 ////////////////////////////// start : global variables. ////////////////////////////// 
-#define N 3  //  how many counters I use for estimation. CTNAME_FD ctname_fd[N]
+#define N 4  // I need <= N different counters to compute all metrics : CTNAME_FD ctname_fd[N]
 
 /* define the unique id for metrics (add_counter) */
-#define ENERGY_THREAD 1 
+#define ENERGY_THREAD 1 //first metric, m_i  --> the portion of E for each thread
+#define ENERGY_CORES 2   // second metric. E-cores --> total E.
+
+/* define type, config value for RAPL attr*/
+#define PERF_TYPE_RAPL 10
+#define PERF_COUNT_ENERGY_COERS 1
+#define PERF_COUNT_ENERGY_PKG 2
+#define PERF_COUNT_ENERGY_RAM 3
+#define PERF_COUNT_ENERGY_GPU 4
+#define PERF_RAPL_SCALE 2.3283064365386962890625e-10
+
 
 // mnemonic for base perf event-counters. why cannot '-'
 enum perf_event{
@@ -39,7 +52,8 @@ enum perf_event{
   cache_misses=4,
   branch_instructions=5,
   branches=5,
-  branch_misses=6
+  branch_misses=6,
+  energy_cores=21   // need sudo
 };
 
 typedef struct
@@ -53,7 +67,8 @@ typedef struct
 static CTNAME_FD ctname_fd[N]={
   {instructions,-1},
   {cpu_cycles,-1},
-  {cache_misses,-1}
+  {cache_misses,-1},
+  {energy_cores,-1}
 };  
 
 ////////////////////////////// end : global variables. ////////////////////////////// 
@@ -62,6 +77,7 @@ static CTNAME_FD ctname_fd[N]={
 /* init and fini do not do anything */
 /* This is intended! */
 int32_t init(){
+
   return 0;
 }
 void fini(){
@@ -116,6 +132,11 @@ void build_perf_attr(struct perf_event_attr * attr, int event_num)
       attr->config = PERF_COUNT_HW_BRANCH_MISSES;
       break;
 
+    case energy_cores: 
+      attr->type   = PERF_TYPE_RAPL;
+      attr->config = PERF_COUNT_ENERGY_COERS;
+      break;      
+
     default:
       break;
 
@@ -142,7 +163,13 @@ void set_fd(int event_num)
   struct perf_event_attr attr; 
 
   build_perf_attr(&attr, event_num);
-  fd = perf_event_open(&attr, 0,-1,-1,0);
+
+  if(event_num == 21){ //rapl-read
+    fd = perf_event_open(&attr, -1,0,-1,0);
+  }else{ //others
+    fd = perf_event_open(&attr, 0,-1,-1,0);
+  }
+  
   for(i=0;i<N;i++){
     if(ctname_fd[i].event_num == event_num){
       ctname_fd[i].fd = fd;
@@ -155,18 +182,25 @@ int32_t add_counter(char * event_name)
 {
   int id=0; //unique id.
 
-  int i=0; // for loop.
-
-  if(strstr( event_name, "energy-thread" ) == event_name)
-  {
+  // can not use 'switch' for strings in c ?
+  if(strstr( event_name, "energy-thread" ) == event_name){
+    
     id = ENERGY_THREAD;
 
     set_fd(instructions);
     set_fd(cpu_cycles);
     set_fd(cache_misses);
 
-    return id;
+  }else if(strstr( event_name, "energy-cores" ) == event_name){
+    
+    id = ENERGY_CORES;
+
+    set_fd(energy_cores);
+
   }
+
+  return id;
+
 }
 
 /* reads value repeatedly */
@@ -216,27 +250,37 @@ uint64_t get_counterValue(int event_num){
 
 
 uint64_t get_value(int id){
+  int i;
   uint64_t result;
   
-  uint64_t count1=0; 
-  uint64_t count2=0; 
-  uint64_t count3=0;
-
+  uint64_t counters[N];
+ 
+  for(i=0;i<N;i++){
+    counters[N]=0;
+  }
 
   if(id == ENERGY_THREAD){ 
-   
-    count1=get_counterValue(instructions);
-    count2=get_counterValue(cpu_cycles);
-    count3=get_counterValue(cache_misses);
 
-    if (count1<0|| count2<0 || count3<0){
+    counters[0]=get_counterValue(instructions);
+    counters[1]=get_counterValue(cpu_cycles);
+    counters[2]=get_counterValue(cache_misses);
+    
+    for(i=0;i<3;i++){
+      if(counters[i]<0)
+        return !0;
+    }
+    
+    result = 1.602416e-9*counters[0]-9.779874e-11 *counters[1] + 6.437730e-08*counters[2] +2.418160e+03;  
+
+  }else if(id == ENERGY_CORES){
+    counters[4]=get_counterValue(energy_cores);
+    if(counters[4]<0){
       return !0;
     }
-     
+
+    result = counters[4]*PERF_RAPL_SCALE;
   }
   
-  result = 1.602416e-9*count1-9.779874e-11 *count2 +  6.437730e-08*count3 +2.418160e+03;
- 
   return result;
 }
 
