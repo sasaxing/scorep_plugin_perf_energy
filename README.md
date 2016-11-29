@@ -59,11 +59,11 @@ See below for a list of available metrics.
  
 ###Available metrics
 
-| Name                   |                                   estimation fomula                                        |
-| -----------------------| -------------------------------------------------------------------------------------------|
-| energy-thread          |  1.602416e-9*counters[0]-9.779874e-11 *counters[1] + 6.437730e-08*counters[2] +2.418160e+03|
-| energy-cores           |  RAPL*scale                                                                                |
-| < to be continued >    |  < to be continued >                                                                       |
+|  Name                   |                                   estimation fomula                                        |
+|-------------------------| -------------------------------------------------------------------------------------------|
+|  energy-thread          |  1.602416e-9*counters[0]-9.779874e-11 *counters[1] + 6.437730e-08*counters[2] +2.418160e+03|
+|  energy-cores           |  RAPL*scale                                                                                |
+|  ......                 |  ......                                                                    
 
 E.g. 
 
