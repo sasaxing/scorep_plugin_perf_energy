@@ -59,15 +59,15 @@ See below for a list of available metrics.
  
 ###Available metrics
 
-|  Name                   |                                   estimation fomula                                        |
-|-------------------------| -------------------------------------------------------------------------------------------|
-|  energy-thread          |  1.602416e-9*instructions-9.779874e-11*cycles+6.437730e-08*cache_misses+2.418160e+03       |
-|  energy-cores           |  RAPL*scale                                                                                |
-|  ......                 |  ......                                                                    
+|  Name                         |                                   estimation fomula                                        |
+|-------------------------------| -------------------------------------------------------------------------------------------|
+|  energy-thread                |  1.602416e-9*instructions-9.779874e-11*cycles+6.437730e-08*cache_misses+2.418160e+03       |
+|  power-energy-cores           |  RAPL*scale                                                                                |
+|  ......                       |  ......                                                                    
 
 E.g. 
 
-    export SCOREP_METRIC_PERF_PLUGIN=energy-cores
+    export SCOREP_METRIC_PERF_PLUGIN=power-energy-cores
 
 ###If anything fails
 
