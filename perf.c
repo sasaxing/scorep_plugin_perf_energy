@@ -1,6 +1,17 @@
-// version10: provide 2 metrics, m_i and E-cores.
+// version12: 
+// using global variables to distribute energy to threads
+// ENERGY-THREAD = m_i/m_sum * ENERGY-CORES
 
-// estimation equation: Joules.power.energy.cores = 1.602416e-9*instructions-9.779874e-11 *cpu.cycles +  6.437730e-08*cache.misses +2.418160e+03
+/* Comparision to previous versions: 
+ * 
+ * version 11: based on 'round' assumption, m_sum is global
+ * version 12: based on 'balance' assumption, m_sum is local
+ *
+ */
+
+// left problems: false sharing
+
+// m_i : estimation equation: Joules.power.energy.cores = 1.602416e-9*instructions-9.779874e-11 *cpu.cycles +  6.437730e-08*cache.misses +2.418160e+03
 
 ///////////////////////////////// start： headers///////////////////////////////////////////
 // check if there exists VT/SCOREP，then decide which header to include.
@@ -28,7 +39,7 @@
 
 
 ////////////////////////////// start : global variables. ////////////////////////////// 
-#define N 4  // I need <= N different counters to compute all metrics : CTNAME_FD ctname_fd[N]
+#define N 4  //  how many counters I use for estimation. CTNAME_FD ctname_fd[N]
 
 /* define the unique id for metrics (add_counter) */
 #define ENERGY_THREAD 1 //first metric, m_i  --> the portion of E for each thread
@@ -43,6 +54,16 @@
 #define PERF_RAPL_SCALE 2.3283064365386962890625e-10
 
 
+#define N_THREADS 2  //must be constant, compiler needs to assign space for arrays.
+
+ // keep track of the value of previous measurement.
+uint64_t m_i[N_THREADS];
+
+int round_num[N_THREADS]; //keep track if this is the first round. 0:first, 1: not first
+
+//int exe_num[N_THREADS];
+
+
 // mnemonic for base perf event-counters. why cannot '-'
 enum perf_event{
   cpu_cycles=1,
@@ -53,7 +74,7 @@ enum perf_event{
   branch_instructions=5,
   branches=5,
   branch_misses=6,
-  energy_cores=21   // need sudo
+  power_energy_cores=21   // need sudo
 };
 
 typedef struct
@@ -68,7 +89,7 @@ static CTNAME_FD ctname_fd[N]={
   {instructions,-1},
   {cpu_cycles,-1},
   {cache_misses,-1},
-  {energy_cores,-1}
+  {power_energy_cores,-1}
 };  
 
 ////////////////////////////// end : global variables. ////////////////////////////// 
@@ -77,6 +98,13 @@ static CTNAME_FD ctname_fd[N]={
 /* init and fini do not do anything */
 /* This is intended! */
 int32_t init(){
+
+  int i=0;
+  for(i=0;i<N_THREADS;i++){
+    m_i[i] = 0;
+    round_num[i]=0;
+    //exe_num[i]=0;
+  }
 
   return 0;
 }
@@ -132,7 +160,7 @@ void build_perf_attr(struct perf_event_attr * attr, int event_num)
       attr->config = PERF_COUNT_HW_BRANCH_MISSES;
       break;
 
-    case energy_cores: 
+    case power_energy_cores: 
       attr->type   = PERF_TYPE_RAPL;
       attr->config = PERF_COUNT_ENERGY_COERS;
       break;      
@@ -164,7 +192,7 @@ void set_fd(int event_num)
 
   build_perf_attr(&attr, event_num);
 
-  if(event_num == 21){ //rapl-read
+  if(event_num == power_energy_cores){ //rapl-read
     fd = perf_event_open(&attr, -1,0,-1,0);
   }else{ //others
     fd = perf_event_open(&attr, 0,-1,-1,0);
@@ -182,25 +210,26 @@ int32_t add_counter(char * event_name)
 {
   int id=0; //unique id.
 
-  // can not use 'switch' for strings in c ?
-  if(strstr( event_name, "energy-thread" ) == event_name){
-    
+  int i=0; // for loop.
+
+  if(strstr( event_name, "energy-thread" ) == event_name)
+  {
     id = ENERGY_THREAD;
 
     set_fd(instructions);
     set_fd(cpu_cycles);
     set_fd(cache_misses);
+    set_fd(power_energy_cores);
 
   }else if(strstr( event_name, "energy-cores" ) == event_name){
     
     id = ENERGY_CORES;
 
-    set_fd(energy_cores);
+    set_fd(power_energy_cores);
 
   }
 
   return id;
-
 }
 
 /* reads value repeatedly */
@@ -219,7 +248,7 @@ int get_fd(int event_num)
     }
   }
 
-  if(fd<=1){
+  if(fd<=-1){
       fprintf(stderr, "Error: Failed to get counter %d!\n", event_num);
       return -1;
   }
@@ -234,8 +263,8 @@ uint64_t get_counterValue(int event_num){
   uint64_t count;
 
   fd = get_fd(event_num);
-  if(fd <= 0){
-      fprintf(stderr, "Unable to get event for event_num=%d!",event_num);
+  if(fd <= -1){
+      fprintf(stderr, "Unable to get event for event_num=%d!\n",event_num);
       return -1;
   }
 
@@ -253,34 +282,55 @@ uint64_t get_value(int id){
   int i;
   uint64_t result;
   
-  uint64_t counters[N];
- 
-  for(i=0;i<N;i++){
-    counters[N]=0;
+  uint64_t count1=0; 
+  uint64_t count2=0; 
+  uint64_t count3=0;
+  uint64_t energy_cores_value=0;
+
+  uint64_t m_sum=0;
+
+  int tid;
+  tid=omp_get_thread_num();
+/*
+  if(exe_num[tid]<100){
+    printf("----- START: tid=%d, No. %d to execute get_value(). -----\n", tid, exe_num[tid]);
   }
+*/
 
   if(id == ENERGY_THREAD){ 
-
-    counters[0]=get_counterValue(instructions);
-    counters[1]=get_counterValue(cpu_cycles);
-    counters[2]=get_counterValue(cache_misses);
-    
-    for(i=0;i<3;i++){
-      if(counters[i]<0)
-        return !0;
+    // 0. read all values.
+    count1=get_counterValue(instructions);
+    count2=get_counterValue(cpu_cycles);
+    count3=get_counterValue(cache_misses);
+    energy_cores_value=get_counterValue(power_energy_cores) * PERF_RAPL_SCALE;
+    if (count1<0|| count2<0 || count3<0 || energy_cores_value<0){
+      return !0;
     }
-    
-    result = 1.602416e-9*counters[0]-9.779874e-11 *counters[1] + 6.437730e-08*counters[2] +2.418160e+03;  
+ 
+    m_i[tid] = 1.602416e-9*count1 - 9.779874e-11*count2 + 6.437730e-08*count3 + 2.418160e+03;  // record the current measurement.
 
-  }else if(id == ENERGY_CORES){
-    counters[4]=get_counterValue(energy_cores);
-    if(counters[4]<0){
+    for(i=0;i<N_THREADS;i++){
+      m_sum += m_i[i];
+    }
+
+    result = m_i[tid]*(1.0)/m_sum * energy_cores_value;
+  
+ //   printf("tid=%d, m_i[%d]=%"PRIu64", m_sum=%"PRIu64", result=%"PRIu64".\n", tid, tid, m_i[tid], m_sum, result);
+
+  }else if(id == ENERGY_CORES) {
+    energy_cores_value = get_counterValue(power_energy_cores) * PERF_RAPL_SCALE;
+    if(energy_cores_value < 0){
       return !0;
     }
 
-    result = counters[4]*PERF_RAPL_SCALE;
+    result = energy_cores_value ;
+
   }
-  
+/*
+  if(exe_num[tid]<100){
+    printf("-----   END: tid=%d, No. %d to execute get_value(). -----\n", tid, exe_num[tid]++);
+  }
+  */
   return result;
 }
 
@@ -303,7 +353,7 @@ SCOREP_Metric_Plugin_MetricProperties * get_event_info(char * event_name)
         return NULL;
   }
   return_values[0].name        = strdup(event_name);  //strdup == duplicate.
-  return_values[0].unit        = NULL;
+  return_values[0].unit        = "Joules";
   return_values[0].description = NULL;
   return_values[0].mode        = SCOREP_METRIC_MODE_ACCUMULATED_START;
   return_values[0].value_type  = SCOREP_METRIC_VALUE_UINT64;
