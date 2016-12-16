@@ -1,15 +1,13 @@
-// version12: 
+// version14: 
 // using global variables to distribute energy to threads
 // ENERGY-THREAD = m_i/m_sum * ENERGY-CORES
 
 /* Comparision to previous versions: 
  * 
- * version 11: based on 'round' assumption, m_sum is global
- * version 12: based on 'balance' assumption, m_sum is local
+ * version 12: contains false sharing
+ * version 14: fix false sharing
  *
  */
-
-// left problems: false sharing
 
 // m_i : estimation equation: Joules.power.energy.cores = 1.602416e-9*instructions-9.779874e-11 *cpu.cycles +  6.437730e-08*cache.misses +2.418160e+03
 
@@ -56,13 +54,13 @@
 
 #define N_THREADS 2  //must be constant, compiler needs to assign space for arrays.
 
- // keep track of the value of previous measurement.
-uint64_t m_i[N_THREADS];
+#define CACHE_LINE_SIZE 64
 
-int round_num[N_THREADS]; //keep track if this is the first round. 0:first, 1: not first
+struct thread_local {
+  uint64_t m_i;
+} __attribute__ ((aligned(CACHE_LINE_SIZE)));
 
-//int exe_num[N_THREADS];
-
+struct thread_local local_val[N_THREADS];
 
 // mnemonic for base perf event-counters. why cannot '-'
 enum perf_event{
@@ -84,7 +82,7 @@ typedef struct
 }CTNAME_FD;
 
 // global array for fd setter and getter.
-// store those that may be useful to calculate required metric result.
+// store those that are useful to calculate required metric result.
 static CTNAME_FD ctname_fd[N]={
   {instructions,-1},
   {cpu_cycles,-1},
@@ -94,26 +92,21 @@ static CTNAME_FD ctname_fd[N]={
 
 ////////////////////////////// end : global variables. ////////////////////////////// 
 
-
-/* init and fini do not do anything */
-/* This is intended! */
+/* init() is intended, executed only once at the beginning before getting any result.*/
 int32_t init(){
-
   int i=0;
   for(i=0;i<N_THREADS;i++){
-    m_i[i] = 0;
-    round_num[i]=0;
-    //exe_num[i]=0;
+    local_val[i].m_i=0;
+//    local_val[i].round_num=0;
   }
-
   return 0;
 }
+
+/* fini() is also intended, executed only once in the end.*/
 void fini(){
   /* we do not close perfs file descriptors */
   /* as we do not store this information */
 }
-
-/////////////////begin: assign value to all attr.type , attr.config.//////////////////////
 
 /* This function writes the attr definitions for a given event name
  * If the event has not been found, attr->type is PERF_TYPE_MAX
@@ -172,8 +165,6 @@ void build_perf_attr(struct perf_event_attr * attr, int event_num)
 
 }
 
-/////////////////end: assign value to all attr.type , attr.config.////////////////////
-
 
 /* syscall to gather performance counters. */
 static long perf_event_open(struct perf_event_attr *hw_event, pid_t pid,
@@ -206,7 +197,7 @@ void set_fd(int event_num)
 }
 
 /* registers perf event , it provides a unique ID for each metric.*/
-int32_t add_counter(char * event_name)
+int32_t add_counter(char * event_name)  // callback, fixed parameter : metric name(string)--> not possible to use switch.
 {
   int id=0; //unique id.
 
@@ -291,11 +282,7 @@ uint64_t get_value(int id){
 
   int tid;
   tid=omp_get_thread_num();
-/*
-  if(exe_num[tid]<100){
-    printf("----- START: tid=%d, No. %d to execute get_value(). -----\n", tid, exe_num[tid]);
-  }
-*/
+
 
   if(id == ENERGY_THREAD){ 
     // 0. read all values.
@@ -307,15 +294,14 @@ uint64_t get_value(int id){
       return !0;
     }
  
-    m_i[tid] = 1.602416e-9*count1 - 9.779874e-11*count2 + 6.437730e-08*count3 + 2.418160e+03;  // record the current measurement.
+    local_val[tid].m_i = 1.602416e-9*count1 - 9.779874e-11*count2 + 6.437730e-08*count3 + 2.418160e+03;  // record the current measurement.
 
     for(i=0;i<N_THREADS;i++){
-      m_sum += m_i[i];
+      m_sum += local_val[tid].m_i;
     }
 
-    result = m_i[tid]*(1.0)/m_sum * energy_cores_value;
+    result = local_val[tid].m_i*(1.0)/m_sum * energy_cores_value;
   
- //   printf("tid=%d, m_i[%d]=%"PRIu64", m_sum=%"PRIu64", result=%"PRIu64".\n", tid, tid, m_i[tid], m_sum, result);
 
   }else if(id == ENERGY_CORES) {
     energy_cores_value = get_counterValue(power_energy_cores) * PERF_RAPL_SCALE;
@@ -326,11 +312,7 @@ uint64_t get_value(int id){
     result = energy_cores_value ;
 
   }
-/*
-  if(exe_num[tid]<100){
-    printf("-----   END: tid=%d, No. %d to execute get_value(). -----\n", tid, exe_num[tid]++);
-  }
-  */
+
   return result;
 }
 
