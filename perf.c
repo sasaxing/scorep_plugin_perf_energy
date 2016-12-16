@@ -9,6 +9,7 @@
  *
  */
 
+
 // m_i : estimation equation: Joules.power.energy.cores = 1.602416e-9*instructions-9.779874e-11 *cpu.cycles +  6.437730e-08*cache.misses +2.418160e+03
 
 ///////////////////////////////// start： headers///////////////////////////////////////////
@@ -41,7 +42,7 @@
 
 /* define the unique id for metrics (add_counter) */
 #define ENERGY_THREAD 1 //first metric, m_i  --> the portion of E for each thread
-#define ENERGY_CORES 2   // second metric. E-cores --> total E.
+#define POWER_ENERGY_CORES 2   // second metric. E-cores --> total E.
 
 /* define type, config value for RAPL attr*/
 #define PERF_TYPE_RAPL 10
@@ -212,9 +213,9 @@ int32_t add_counter(char * event_name)  // callback, fixed parameter : metric na
     set_fd(cache_misses);
     set_fd(power_energy_cores);
 
-  }else if(strstr( event_name, "energy-cores" ) == event_name){
+  }else if(strstr( event_name, "power-energy-cores" ) == event_name){
     
-    id = ENERGY_CORES;
+    id = POWER_ENERGY_CORES;
 
     set_fd(power_energy_cores);
 
@@ -268,7 +269,6 @@ uint64_t get_counterValue(int event_num){
   return count;
 }
 
-
 uint64_t get_value(int id){
   int i;
   uint64_t result;
@@ -303,7 +303,7 @@ uint64_t get_value(int id){
     result = local_val[tid].m_i*(1.0)/m_sum * energy_cores_value;
   
 
-  }else if(id == ENERGY_CORES) {
+  }else if(id == POWER_ENERGY_CORES) {
     energy_cores_value = get_counterValue(power_energy_cores) * PERF_RAPL_SCALE;
     if(energy_cores_value < 0){
       return !0;
