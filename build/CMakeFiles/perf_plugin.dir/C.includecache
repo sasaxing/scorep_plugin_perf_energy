@@ -1,0 +1,44 @@
+#IncludeRegexLine: ^[ 	]*#[ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/xiaosha/scorep/include/scorep/SCOREP_MetricPlugins.h
+stdbool.h
+-
+scorep/SCOREP_MetricTypes.h
+-
+
+/home/xiaosha/scorep/include/scorep/SCOREP_MetricTypes.h
+stdint.h
+-
+
+/home/xiaosha/scorep/plugin/scorep_plugin_perf_energy/perf.c
+scorep/SCOREP_MetricPlugins.h
+-
+omp.h
+-
+inttypes.h
+-
+stdlib.h
+-
+string.h
+-
+stdio.h
+-
+errno.h
+-
+unistd.h
+-
+stdint.h
+-
+sys/syscall.h
+-
+sys/types.h
+-
+linux/perf_event.h
+-
+

@@ -1,0 +1,196 @@
+// perf.c with only cpu-cycles
+// 28.10.2016
+
+
+///////////////////////////////// start： 头文件的选择///////////////////////////////////////////
+// 看有没有VT/SCOREP，然后决定包含对应的头文件。
+//in my case, 在build时写了-DSCOREP_DIR=~/install/scorep, 所以这里检测到了scorep，就包含了scorep_MetricPlugin.h
+ 
+#ifdef SCOREP
+#include <scorep/SCOREP_MetricPlugins.h>
+#else
+#error "You need Score-P  to compile this plugin"
+#endif /* SCOREP*/
+ 
+
+#include <inttypes.h>  //PRIu64
+#include <stdlib.h>   // strtoll();   malloc();
+#include <string.h>
+#include <stdio.h>
+#include <errno.h>   
+#include <unistd.h>  
+#include <stdint.h>
+#include <sys/syscall.h>
+
+
+#include <linux/perf_event.h>
+////////////////////////////// end： 头文件的选择////////////////////////////////////////////
+
+
+/* init and fini do not do anything */
+/* This is intended! */
+int32_t init(){
+  return 0;
+}
+void fini(){
+  /* we do not close perfs file descriptors */
+  /* as we do not store this information */
+}
+
+/////////////////begin: assign value to all attr.type , attr.config./////////////////////////////////////////////////
+
+/* This function writes the attr definitions for a given event name
+ * If the event has not been found, attr->type is PERF_TYPE_MAX
+ * */
+void build_perf_attr(struct perf_event_attr * attr, char * name)
+{
+  
+  memset( attr, 0, sizeof( struct perf_event_attr ) ); //The first n bits of attr will be replaced by n 0s. n = sizeof( struct perf_event_attr).
+  attr->config1 = 0;
+  attr->config2 = 0;
+  attr->type    = PERF_TYPE_MAX;
+
+
+  // those that will be used.
+ 
+  if ( ( strstr( name, "cpu-cycles" ) == name ) || ( strstr( name, "cycles" ) == name ) )
+  {
+    attr->type   = PERF_TYPE_HARDWARE;
+    attr->config = PERF_COUNT_HW_CPU_CYCLES;
+  }
+  if ( strstr( name, "instructions" ) == name )
+  {
+    attr->type   = PERF_TYPE_HARDWARE;
+    attr->config = PERF_COUNT_HW_INSTRUCTIONS;
+  }
+  if ( strstr( name, "cache-references" ) == name )
+  {
+    attr->type   = PERF_TYPE_HARDWARE;
+    attr->config = PERF_COUNT_HW_CACHE_REFERENCES;
+  }
+  if ( strstr( name, "cache-misses" ) == name )
+  {
+    attr->type   = PERF_TYPE_HARDWARE;
+    attr->config = PERF_COUNT_HW_CACHE_MISSES;
+  }
+  if ( ( strstr( name, "branch-instructions" ) == name ) || ( strstr( name, "branches" ) == name ) )
+  {
+    attr->type   = PERF_TYPE_HARDWARE;
+    attr->config = PERF_COUNT_HW_BRANCH_INSTRUCTIONS;
+  }
+  if ( strstr( name, "branch-misses" ) == name )
+  {
+    attr->type   = PERF_TYPE_HARDWARE;
+    attr->config = PERF_COUNT_HW_BRANCH_MISSES;
+  }
+
+}
+
+
+/////////////////end: assign value to all attr.type , attr.config./////////////////////////////////////////////////
+
+/* registers perf event */
+// it provides a unique ID for each metric.
+int32_t add_counter(char * event_name){
+  int id = 0;
+
+  if(strstr( event_name, "energy-cores" ) == event_name)
+  {
+    id = 1;
+  }
+  
+  if (id<=0){
+    fprintf(stderr, "Unable to open counter \"%s\". Aborting.\n",event_name);
+    return -1;
+  }
+
+  printf("%s's id = %d\n",event_name, id);
+  return id;
+}
+
+/* reads value */
+uint64_t get_value(int id){
+  
+  int fd1;
+  uint64_t count1=0;
+  struct perf_event_attr attr1;
+  size_t res1;
+
+  build_perf_attr(&attr1, "instructions");
+  fd1 = syscall(__NR_perf_event_open, &attr1, 0, -1, -1, 0);
+  res1 =read(fd1, &count1, sizeof(uint64_t));
+
+  if (res1!=sizeof(uint64_t))
+    return !0;
+ /*
+  if(id == 1){
+    build_perf_attr(&attr1, "instructions");
+    fd1 = syscall(__NR_perf_event_open, &attr1, 0, -1, -1, 0);
+    res1 =read(fd1, &count1, sizeof(uint64_t));
+  }
+
+  if (res1!=sizeof(uint64_t))
+    return !0;
+ */
+  
+   return 123;
+}
+
+#ifdef SCOREP
+
+SCOREP_Metric_Plugin_MetricProperties * get_event_info(char * event_name)
+{
+  SCOREP_Metric_Plugin_MetricProperties * return_values;
+  uint64_t id = add_counter(event_name);
+
+    /* wrong metric */
+  if (id == 0){
+    fprintf(stderr, "PERF metric not recognized: %s", event_name );
+    return NULL;
+  }
+  return_values= malloc(2 * sizeof(SCOREP_Metric_Plugin_MetricProperties) );   /// why 2????
+  if (return_values==NULL){
+        fprintf(stderr, "Score-P Perf Plugin: failed to allocate memory for passing information to Score-P.\n");
+        return NULL;
+  }
+  return_values[0].name        = strdup(event_name);  //strdup == duplicate.
+  return_values[0].unit        = NULL;
+  return_values[0].description = NULL;
+  return_values[0].mode        = SCOREP_METRIC_MODE_ACCUMULATED_START;
+  return_values[0].value_type  = SCOREP_METRIC_VALUE_UINT64;
+  return_values[0].base        = SCOREP_METRIC_BASE_DECIMAL;
+  return_values[0].exponent    = 0;
+  return_values[1].name=NULL;
+  return return_values;
+}
+
+bool get_optional_value( int32_t id, uint64_t* value ){
+  *value=get_value(id);
+  return true;
+}
+
+/**
+ * This function get called to give some informations about the plugin to scorep
+ */
+
+//说明了这个plugin的名字，还有内部的一些结构。
+SCOREP_METRIC_PLUGIN_ENTRY( perf_plugin )
+{
+    /* Initialize info data (with zero) */
+    SCOREP_Metric_Plugin_Info info;
+    memset( &info, 0, sizeof( SCOREP_Metric_Plugin_Info ) );
+
+    /* Set up the structure */
+    info.plugin_version               = SCOREP_METRIC_PLUGIN_VERSION;
+    info.run_per                      = SCOREP_METRIC_PER_THREAD;
+    info.sync                         = SCOREP_METRIC_SYNC;
+    info.initialize                   = init;
+    info.finalize                     = fini;
+    info.get_event_info               = get_event_info;
+    info.add_counter                  = add_counter;
+    info.get_current_value            = get_value;
+    info.get_optional_value           = get_optional_value;
+
+    return info;
+}
+#endif /* SCOREP */

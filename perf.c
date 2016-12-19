@@ -50,8 +50,8 @@
 #define PERF_COUNT_ENERGY_PKG 2
 #define PERF_COUNT_ENERGY_RAM 3
 #define PERF_COUNT_ENERGY_GPU 4
-#define PERF_RAPL_SCALE 2.3283064365386962890625e-10
-
+#define PERF_RAPL_SCALE 2.3283064365386962890625e-10 // unit: Joules
+//#define PERF_RAPL_SCALE 2.3283064365386962890625e-1 // unit: Nanojoules
 
 #define N_THREADS 2  //must be constant, compiler needs to assign space for arrays.
 
@@ -63,7 +63,7 @@ struct thread_local {
 
 struct thread_local local_val[N_THREADS];
 
-// mnemonic for base perf event-counters. why cannot '-'
+// mnemonic for base perf event-counters. 
 enum perf_event{
   cpu_cycles=1,
   cycles=1,
@@ -103,7 +103,7 @@ int32_t init(){
   return 0;
 }
 
-/* fini() is also intended, executed only once in the end.*/
+//This functions is called once per process to clean up all resources used by the metric plugin.
 void fini(){
   /* we do not close perfs file descriptors */
   /* as we do not store this information */
@@ -358,21 +358,30 @@ bool get_optional_value( int32_t id, uint64_t* value ){
 SCOREP_METRIC_PLUGIN_ENTRY( perf_plugin )
 {
     /* Initialize info data (with zero) */
+  //SCOREP_Metric_Plugin_Info :  defined as a struct in SCOREP_MetricPlugins.h
     SCOREP_Metric_Plugin_Info info;
     memset( &info, 0, sizeof( SCOREP_Metric_Plugin_Info ) );
 
     /* Set up the structure */
-    info.plugin_version               = SCOREP_METRIC_PLUGIN_VERSION;
-    info.run_per                      = SCOREP_METRIC_PER_THREAD;
-    info.sync                         = SCOREP_METRIC_SYNC;
-    info.initialize                   = init;
-    info.finalize                     = fini;
-    info.get_event_info               = get_event_info;
-    info.add_counter                  = add_counter;
-    info.get_current_value            = get_value;
-    info.get_optional_value           = get_optional_value;
+    info.plugin_version               = SCOREP_METRIC_PLUGIN_VERSION;  // uint32_t
+    info.run_per                      = SCOREP_METRIC_PER_THREAD; // <SCOREP_MetricTypes.h>: SCOREP_MetricPer, int enum
+    info.sync                         = SCOREP_METRIC_SYNC; //<SCOREP_MetricTypes.h>:SCOREP_MetricSynchronicity, int enum
+    //info.delta_t                      = 1;  //uint64_t, default=0; Set a specific interval for reading metric values.
+    info.initialize                   = init;   // function as a member: int32_t(void)
+    info.finalize                     = fini;   // function as a member: void(void)
+    info.get_event_info               = get_event_info;   // ditto: SCOREP_Metric_Plugin_MetricProperties(char* token)
+    info.add_counter                  = add_counter;      // ditto: int32_t(char* metric_name)
+    info.get_current_value            = get_value;        // ditto: uint64_t(int32_t id)
+    info.get_optional_value           = get_optional_value;   // ditto: bool(int32_t id, uint_64* value)
+    //some other members in this SCOREP_Metric_Plugin_Info Struct but useless here 
+    //info.set_clock_function;   // ditto: void(uint64_t)
+    //info.get_all_values;    //ditto: uint64_t(int32_t, SCOREP_MetricTimeValuePair**)
+    //info.synchronize;         //ditto: void(bool,SCOREP_MetricSynchronizationMode)
+    
+    //info.reserved;        //Reserved space for future features, should be zeroed 
 
     return info;
 }
 
 #endif /* SCOREP */
+

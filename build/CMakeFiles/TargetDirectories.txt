@@ -1,0 +1,7 @@
+/home/xiaosha/scorep/plugin/scorep_plugin_perf_energy/build/CMakeFiles/install.dir
+/home/xiaosha/scorep/plugin/scorep_plugin_perf_energy/build/CMakeFiles/list_install_components.dir
+/home/xiaosha/scorep/plugin/scorep_plugin_perf_energy/build/CMakeFiles/rebuild_cache.dir
+/home/xiaosha/scorep/plugin/scorep_plugin_perf_energy/build/CMakeFiles/perf_plugin.dir
+/home/xiaosha/scorep/plugin/scorep_plugin_perf_energy/build/CMakeFiles/install/strip.dir
+/home/xiaosha/scorep/plugin/scorep_plugin_perf_energy/build/CMakeFiles/install/local.dir
+/home/xiaosha/scorep/plugin/scorep_plugin_perf_energy/build/CMakeFiles/edit_cache.dir
