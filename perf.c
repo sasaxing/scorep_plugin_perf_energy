@@ -36,6 +36,8 @@
 #include <linux/perf_event.h>
 ////////////////////////////// end： headers////////////////////////////////////////////
 
+/* number of threads */
+#define N_THREADS 4  //must be constant, compiler needs to assign space for arrays.
 
 ////////////////////////////// start : global variables. ////////////////////////////// 
 #define N 4  //  how many counters I use for estimation. CTNAME_FD ctname_fd[N]
@@ -50,15 +52,14 @@
 #define PERF_COUNT_ENERGY_PKG 2
 #define PERF_COUNT_ENERGY_RAM 3
 #define PERF_COUNT_ENERGY_GPU 4
-#define PERF_RAPL_SCALE 2.3283064365386962890625e-10 // unit: Joules
-//#define PERF_RAPL_SCALE 2.3283064365386962890625e-1 // unit: Nanojoules
-
-#define N_THREADS 2  //must be constant, compiler needs to assign space for arrays.
+//#define PERF_RAPL_SCALE 2.3283064365386962890625e-10 // unit: Joules
+#define PERF_RAPL_SCALE 2.3283064365386962890625e-1 // unit: Nanojoules
 
 #define CACHE_LINE_SIZE 64
 
 struct thread_local {
   uint64_t m_i;
+  uint32_t round_num;  // sometimes can use it to keep track which time a thread measures (not always useful)
 } __attribute__ ((aligned(CACHE_LINE_SIZE)));
 
 struct thread_local local_val[N_THREADS];
@@ -98,7 +99,7 @@ int32_t init(){
   int i=0;
   for(i=0;i<N_THREADS;i++){
     local_val[i].m_i=0;
-//    local_val[i].round_num=0;
+    local_val[i].round_num=0;
   }
   return 0;
 }
@@ -283,9 +284,9 @@ uint64_t get_value(int id){
   int tid;
   tid=omp_get_thread_num();
 
-
   if(id == ENERGY_THREAD){ 
     // 0. read all values.
+
     count1=get_counterValue(instructions);
     count2=get_counterValue(cpu_cycles);
     count3=get_counterValue(cache_misses);
@@ -301,7 +302,7 @@ uint64_t get_value(int id){
     }
 
     result = local_val[tid].m_i*(1.0)/m_sum * energy_cores_value;
-  
+
 
   }else if(id == POWER_ENERGY_CORES) {
     energy_cores_value = get_counterValue(power_energy_cores) * PERF_RAPL_SCALE;
@@ -312,6 +313,9 @@ uint64_t get_value(int id){
     result = energy_cores_value ;
 
   }
+
+  local_val[tid].round_num++;
+  //printf("tid=%d, No.=%"PRIu32", id=%d, result=%"PRIu64".\n", tid, local_val[tid].round_num, id, result);
 
   return result;
 }
@@ -335,7 +339,7 @@ SCOREP_Metric_Plugin_MetricProperties * get_event_info(char * event_name)
         return NULL;
   }
   return_values[0].name        = strdup(event_name);  //strdup == duplicate.
-  return_values[0].unit        = "Joules";
+  return_values[0].unit        = "Nanojoules";
   return_values[0].description = NULL;
   return_values[0].mode        = SCOREP_METRIC_MODE_ACCUMULATED_START;
   return_values[0].value_type  = SCOREP_METRIC_VALUE_UINT64;
@@ -366,7 +370,7 @@ SCOREP_METRIC_PLUGIN_ENTRY( perf_plugin )
     info.plugin_version               = SCOREP_METRIC_PLUGIN_VERSION;  // uint32_t
     info.run_per                      = SCOREP_METRIC_PER_THREAD; // <SCOREP_MetricTypes.h>: SCOREP_MetricPer, int enum
     info.sync                         = SCOREP_METRIC_SYNC; //<SCOREP_MetricTypes.h>:SCOREP_MetricSynchronicity, int enum
-    //info.delta_t                      = 1;  //uint64_t, default=0; Set a specific interval for reading metric values.
+    info.delta_t                      = 10*1000*1000;  //uint64_t, default=0; Set a specific interval for reading metric values.
     info.initialize                   = init;   // function as a member: int32_t(void)
     info.finalize                     = fini;   // function as a member: void(void)
     info.get_event_info               = get_event_info;   // ditto: SCOREP_Metric_Plugin_MetricProperties(char* token)
@@ -379,6 +383,7 @@ SCOREP_METRIC_PLUGIN_ENTRY( perf_plugin )
     //info.synchronize;         //ditto: void(bool,SCOREP_MetricSynchronizationMode)
     
     //info.reserved;        //Reserved space for future features, should be zeroed 
+
 
     return info;
 }
