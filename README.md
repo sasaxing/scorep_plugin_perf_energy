@@ -17,7 +17,8 @@ To compile this plugin, you need:
 ###Building
 
 1. Delete the existing build directory and create your own:
-	rm -r build
+	
+        rm -r build
         mkdir build
         cd build
 
