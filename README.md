@@ -1,8 +1,8 @@
-#Score-P perf energy consumption Counter
+# Score-P perf energy consumption Counter
 
-##Compilation and Installation
+## Compilation and Installation
 
-###Prerequisites
+### Prerequisites
 
 To compile this plugin, you need:
 
@@ -14,7 +14,7 @@ To compile this plugin, you need:
 
 * A recent Linux kernel (`2.6.31+`) with activated tracing and the kernel headers
 
-###Building
+### Building
 
 1. Delete the existing build directory and create your own:
 	
@@ -42,9 +42,9 @@ To compile this plugin, you need:
 
         export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:`pwd`
 
-##Usage
+## Usage
 
-###Score-P
+### Score-P
 
 To use this plugin you have to add it to the `SCOREP_METRIC_PLUGINS` variable, e.g.:
 
@@ -58,7 +58,7 @@ using
 See below for a list of available metrics.
 
  
-###Available metrics
+### Available metrics
 
 |  Name                         |                                   estimation fomula                                        |
 |-------------------------------| -------------------------------------------------------------------------------------------|
@@ -70,7 +70,7 @@ E.g.
 
     export SCOREP_METRIC_PERF_PLUGIN=power-energy-cores
 
-###If anything fails
+### If anything fails
 
 1. Check whether the plugin library can be loaded from the `LD_LIBRARY_PATH`.
 
